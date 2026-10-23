@@ -60,7 +60,8 @@ export default function AdminDashboard() {
         onTutup={() => setTerbuka(false)}
       />
       {/* Konten halaman */}
-      <div className={`flex-1 transition-all duration-200 ${terbuka ? 'lg:pl-72' : ''}`}>
+      <div className="flex-1 lg:pl-72 transition-all duration-200">
+
         {/* Topbar mobile toggle + header */}
         <div className="flex items-center justify-between p-space-md border-b border-surface-variant/30 bg-surface/80 backdrop-blur-md sticky top-0 z-30 lg:hidden">
           <button
