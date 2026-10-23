@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth, signOut } from '../../auth.js'
 import { identitas, navPublic } from '../../data.jsx'
 import Icon from '../Icon.jsx'
 
@@ -11,6 +12,13 @@ import Icon from '../Icon.jsx'
  */
 export default function PublicHeader({ aktif, onNavigasi }) {
   const [menuTerbuka, setMenuTerbuka] = useState(false)
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  const handleKeluar = async () => {
+    await signOut()
+    navigate('/', { replace: true })
+  }
 
   useEffect(() => {
     const onScroll = () => {
@@ -69,12 +77,14 @@ export default function PublicHeader({ aktif, onNavigasi }) {
         </nav>
 
         <div className="flex items-center gap-space-md">
-          <Link
-            to="/manajemen-pengaduan"
-            className="hidden sm:inline-flex items-center px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all"
-          >
-            Masuk Petugas
-          </Link>
+          {user ? (
+            <>
+              <span className="hidden sm:inline font-label-lg text-label-lg text-on-surface">{user.email}</span>
+              <button onClick={handleKeluar} className="hidden sm:inline-flex items-center px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Keluar</button>
+            </>
+          ) : (
+            <Link to="/login" className="hidden sm:inline-flex items-center px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Masuk</Link>
+          )}
           <a
             href="#form-pengaduan"
             onClick={() => onNavigasi('buat-laporan')}
@@ -117,13 +127,14 @@ export default function PublicHeader({ aktif, onNavigasi }) {
               {item.label}
             </a>
           ))}
-          <Link
-            to="/manajemen-pengaduan"
-            onClick={() => setMenuTerbuka(false)}
-            className="block px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:bg-surface-container"
-          >
-            Masuk Petugas
-          </Link>
+          {user ? (
+            <>
+              <span className="block px-space-md py-space-sm font-label-lg text-label-lg text-on-surface">{user.email}</span>
+              <button onClick={() => { handleKeluar(); setMenuTerbuka(false) }} className="block w-full text-left px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:bg-surface-container">Keluar</button>
+            </>
+          ) : (
+            <Link to="/login" onClick={() => setMenuTerbuka(false)} className="block px-space-md py-space-sm rounded-lg font-label-lg text-label-lg text-on-surface-variant hover:bg-surface-container">Masuk</Link>
+          )}
         </nav>
       ) : null}
     </header>
