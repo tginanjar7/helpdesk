@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { jenisLaporan, kategoriLayanan, daftarOpd } from '../../data.jsx'
 import Icon from '../Icon.jsx'
+import { tambahPengaduan } from '../../supabaseClient.js'
 
 const FORM_AWAL = {
   kategori: '',
@@ -55,19 +56,34 @@ export default function ReportForm({ onTerkirim }) {
     setBerkas((b) => b.filter((_, i) => i !== index))
   }
 
-  const kirim = (e) => {
+  const kirim = async (e) => {
     e.preventDefault()
     if (!panjangValid) return
     setMengirim(true)
-    window.setTimeout(() => {
-      setMengirim(false)
+    try {
       const kode = `TKT-2025-${String(Math.floor(Math.random() * 9000) + 1000)}`
+      await tambahPengaduan({
+        nomor_tiket: kode,
+        nama_pelapor: form.nama || 'Warga',
+        identitas_pelapor: form.nik,
+        kategori_layanan: form.kategori,
+        judul_laporan: form.judul,
+        isi_laporan: form.deskripsi,
+        lokasi_kejadian: form.lokasi,
+        lampiran_bukti: berkas.length ? berkas.map((b) => b.nama).join(', ') : null,
+        catatan_tindak_lanjut: null,
+        status_aduan: 'baru',
+      })
       setSukses({ kode, nama: form.nama || 'Warga' })
       setForm(FORM_AWAL)
       setBerkas([])
       setJenis(jenisLaporan[0].value)
       onTerkirim?.({ kode, ...form })
-    }, 900)
+    } catch (err) {
+      alert('Gagal mengirim: ' + (err.message || err))
+    } finally {
+      setMengirim(false)
+    }
   }
 
   const reset = () => {
