@@ -1,55 +1,134 @@
-/**
- * DaftarPengaduan.jsx
- * Tabel daftar tiket pengaduan dengan filter, status chip, aksi cepat,
- * paginasi, dan drawer detail tiket.
- */
-import { useState, useMemo } from 'react'
-import { daftarPengaduan, statusGaya, adminFilterKategori, adminFilterOpd, adminFilterStatus } from '../../dataAdmin.jsx'
+import { useState, useMemo, useEffect } from 'react'
+import { ambilSemuaPengaduan, tambahPengaduan, ubahPengaduan, hapusPengaduan } from '../../supabaseClient.js'
 import Icon from '../Icon.jsx'
 import Pagination from '../ui/Pagination.jsx'
-import TiketDetail from './TiketDetail.jsx'
+
+const STATUS_PILIHAN = ['baru', 'diverifikasi', 'diproses', 'selesai', 'ditolak']
+
+const STATUS_LABEL = {
+  baru: 'Baru',
+  diverifikasi: 'Diverifikasi',
+  diproses: 'Diproses',
+  selesai: 'Selesai',
+  ditolak: 'Ditolak',
+}
+
+const chipWarna = {
+  baru: 'bg-error-container text-tertiary',
+  diverifikasi: 'bg-secondary-container text-on-secondary-container',
+  diproses: 'bg-surface-container-highest text-primary',
+  selesai: 'bg-secondary-container text-on-secondary-container',
+  ditolak: 'bg-error-container text-tertiary',
+}
+const titikWarna = {
+  baru: 'bg-tertiary',
+  diverifikasi: 'bg-secondary',
+  diproses: 'bg-primary',
+  selesai: 'bg-primary',
+  ditolak: 'bg-tertiary',
+}
 
 export default function DaftarPengaduan({ onPilihTiket }) {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [keyword, setKeyword] = useState('')
-  const [kategori, setKategori] = useState('')
-  const [opd, setOpd] = useState('')
-  const [status, setStatus] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [halaman, setHalaman] = useState(1)
+  const [modalTambah, setModalTambah] = useState(false)
+  const [form, setForm] = useState({
+    nomor_tiket: '',
+    nama_pelapor: '',
+    identitas_pelapor: '',
+    kategori_layanan: '',
+    judul_laporan: '',
+    isi_laporan: '',
+    lokasi_kejadian: '',
+    lampiran_bukti: '',
+    catatan_tindak_lanjut: '',
+    status_aduan: 'baru',
+  })
+  const [saving, setSaving] = useState(false)
   const perPage = 10
 
-  const chipWarna = {
-    Baru: 'bg-error-container text-tertiary',
-    Diverifikasi: 'bg-secondary-container text-on-secondary-container',
-    Diproses: 'bg-surface-container-highest text-primary',
-    Selesai: 'bg-secondary-container text-on-secondary-container',
-    Ditolak: 'bg-error-container text-tertiary',
-  }
-  const titikWarna = {
-    Baru: 'bg-tertiary',
-    Diverifikasi: 'bg-secondary',
-    Diproses: 'bg-primary',
-    Selesai: 'bg-primary',
-    Ditolak: 'bg-tertiary',
+  const loadData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const rows = await ambilSemuaPengaduan()
+      setData(rows || [])
+    } catch (e) {
+      setError(e.message || 'Gagal memuat data')
+    } finally {
+      setLoading(false)
+    }
   }
 
+  useEffect(() => {
+    loadData()
+  }, [])
+
   const filtered = useMemo(() => {
-    return daftarPengaduan.filter((t) => {
+    return data.filter((t) => {
       const cocokKata =
         !keyword ||
-        t.kode.toLowerCase().includes(keyword.toLowerCase()) ||
-        t.nama.toLowerCase().includes(keyword.toLowerCase()) ||
-        t.isi.toLowerCase().includes(keyword.toLowerCase()) ||
-        (t.nik || '').toLowerCase().includes(keyword.toLowerCase())
-      const cocokKategori = !kategori || t.kategori === kategori
-      const cocokOpd = !opd || t.instansi === opd
-      const cocokStatus = !status || t.status === status
-      return cocokKata && cocokKategori && cocokOpd && cocokStatus
+        (t.nomor_tiket || '').toLowerCase().includes(keyword.toLowerCase()) ||
+        (t.nama_pelapor || '').toLowerCase().includes(keyword.toLowerCase()) ||
+        (t.isi_laporan || '').toLowerCase().includes(keyword.toLowerCase()) ||
+        (t.identitas_pelapor || '').toLowerCase().includes(keyword.toLowerCase())
+      const cocokStatus = !statusFilter || t.status_aduan === statusFilter
+      return cocokKata && cocokStatus
     })
-  }, [keyword, kategori, opd, status])
+  }, [data, keyword, statusFilter])
 
   const totalHalaman = Math.max(1, Math.ceil(filtered.length / perPage))
   const halamanSaatIni = Math.min(halaman, totalHalaman)
   const dataHalaman = filtered.slice((halamanSaatIni - 1) * perPage, halamanSaatIni * perPage)
+
+  const handleTambah = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await tambahPengaduan(form)
+      setModalTambah(false)
+      setForm({
+        nomor_tiket: '',
+        nama_pelapor: '',
+        identitas_pelapor: '',
+        kategori_layanan: '',
+        judul_laporan: '',
+        isi_laporan: '',
+        lokasi_kejadian: '',
+        lampiran_bukti: '',
+        catatan_tindak_lanjut: '',
+        status_aduan: 'baru',
+      })
+      await loadData()
+    } catch (err) {
+      alert('Gagal menyimpan: ' + (err.message || err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      await ubahPengaduan(id, { status_aduan: newStatus })
+      await loadData()
+    } catch (err) {
+      alert('Gagal mengubah status: ' + (err.message || err))
+    }
+  }
+
+  const handleHapus = async (id) => {
+    if (!confirm('Hapus pengaduan ini?')) return
+    try {
+      await hapusPengaduan(id)
+      await loadData()
+    } catch (err) {
+      alert('Gagal menghapus: ' + (err.message || err))
+    }
+  }
 
   return (
     <div className="space-y-space-lg">
@@ -68,69 +147,32 @@ export default function DaftarPengaduan({ onPilihTiket }) {
         <div className="md:col-span-2">
           <select
             className="w-full h-11 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-            value={kategori}
-            onChange={(e) => { setKategori(e.target.value); setHalaman(1) }}
-          >
-            <option value="">Semua Kategori</option>
-            {adminFilterKategori.map((k) => (
-              <option key={k} value={k}>{k}</option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <select
-            className="w-full h-11 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-            value={opd}
-            onChange={(e) => { setOpd(e.target.value); setHalaman(1) }}
-          >
-            <option value="">Semua Dinas (OPD)</option>
-            {adminFilterOpd.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <select
-            className="w-full h-11 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-            value={status}
-            onChange={(e) => { setStatus(e.target.value); setHalaman(1) }}
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setHalaman(1) }}
           >
             <option value="">Semua Status</option>
-            {adminFilterStatus.map((s) => (
-              <option key={s} value={s}>{s}</option>
+            {STATUS_PILIHAN.map((s) => (
+              <option key={s} value={s}>{STATUS_LABEL[s] || s}</option>
             ))}
           </select>
         </div>
-        <div className="md:col-span-2 relative">
-          <input
-            type="date"
-            className="w-full h-11 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-          />
-        </div>
       </div>
+
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
           <span>Menampilkan hasil terfilter:</span>
           <span className="px-2 py-0.5 rounded-full bg-surface-container-high font-semibold text-on-surface">
-            {filtered.length} dari {daftarPengaduan.length} Tiket
+            {filtered.length} dari {data.length} Tiket
           </span>
         </div>
-        <div className="flex items-center gap-space-xs">
-          <button
-            type="button"
-            className="h-9 px-space-sm rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm hover:bg-surface-container-high transition-colors flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-            <span>Reset Filter</span>
-          </button>
-          <button
-            type="button"
-            className="h-9 px-space-md rounded-lg bg-primary text-on-primary font-label-sm text-label-sm hover:bg-primary-container transition-colors flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[16px]">filter_list</span>
-            <span>Terapkan Filter</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          className="h-9 px-space-md rounded-lg bg-primary text-on-primary font-label-sm text-label-sm hover:bg-primary-container transition-colors flex items-center gap-1"
+          onClick={() => setModalTambah(true)}
+        >
+          <span className="material-symbols-outlined text-[16px]">add</span>
+          <span>Tambah Data</span>
+        </button>
       </div>
 
       {/* Tabel Pengaduan */}
@@ -142,124 +184,184 @@ export default function DaftarPengaduan({ onPilihTiket }) {
             <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold">Terkini</span>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-surface-variant/40 bg-surface-container-low">
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Tiket</th>
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Pelapor</th>
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Kategori</th>
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Isi Laporan</th>
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Lokasi</th>
-                <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Instansi / Bidang</th>
-                <th className="py-3 px-3 font-label-sm text-label-sm text-on-surface-variant">Bukti</th>
-                <th className="py-3 px-3 font-label-sm text-label-sm text-on-surface-variant text-center">Status</th>
-                <th className="py-3 px-3 font-label-sm text-label-sm text-on-surface-variant text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dataHalaman.map((t) => {
-                const chip = chipWarna[t.status] || 'bg-surface-container-high text-on-surface-variant'
-                const titik = titikWarna[t.status] || 'bg-surface-variant'
-                return (
-                  <tr key={t.kode} className="hover:bg-surface-container-low/70 transition-colors group border-b border-surface-variant/30 bg-surface-container-lowest/50">
-                    <td className="py-4 px-4 align-top">
-                      <div className="flex flex-col">
-                        <span className="font-mono font-bold text-primary group-hover:underline cursor-pointer">{t.kode}</span>
-                        <span className="font-label-sm text-label-sm text-on-surface-variant">{t.waktuRelatif}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 align-top">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-on-surface">{t.nama}</span>
-                        <span className="font-label-sm text-label-sm text-on-surface-variant font-mono">{t.nik}</span>
-                        <span className="font-label-sm text-label-sm text-on-surface-variant">{t.telepon}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-3 align-top">
-                      <span className="inline-flex px-2 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm font-medium">{t.kategori}</span>
-                    </td>
-                    <td className="py-4 px-4 align-top">
-                      <p className="line-clamp-2 text-on-surface font-medium leading-relaxed">{t.isi}</p>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">{t.tanggal}</span>
-                    </td>
-                    <td className="py-4 px-3 align-top">
-                      <div className="flex items-start gap-1">
-                        <span className="material-symbols-outlined text-[16px] text-tertiary shrink-0 mt-0.5">location_on</span>
-                        <span className="text-on-surface-variant leading-snug">{t.lokasi}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-3 align-top">
-                      <span className="font-semibold text-on-surface block">{t.instansi}</span>
-                      <span className="font-label-sm text-label-sm text-on-surface-variant">{t.bidang}</span>
-                    </td>
-                    <td className="py-4 px-3 align-top text-center">
-                      <button className="p-1 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-primary inline-flex items-center gap-1 font-label-sm text-label-sm px-2">
-                        <span className="material-symbols-outlined text-[16px]">{t.bukti.icon}</span>
-                        <span>{t.bukti.tipe}</span>
-                      </button>
-                    </td>
-                    <td className="py-4 px-3 align-top text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${chip} font-label-md text-label-md uppercase font-semibold`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${titik}`} />
-                        {t.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-3 align-top text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          title="Disposisi Cepat"
-                          className="p-1.5 rounded-lg text-primary hover:bg-surface-container transition-colors"
-                          onClick={() => onPilihTiket(t.kode)}
+
+        {loading && (
+          <div className="py-10 text-center text-on-surface-variant font-label-sm text-label-sm">
+            Memuat data...
+          </div>
+        )}
+
+        {error && (
+          <div className="py-10 text-center text-tertiary font-label-sm text-label-sm">
+            Terjadi error: {error}
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-surface-variant/40 bg-surface-container-low">
+                  <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Tiket</th>
+                  <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Pelapor</th>
+                  <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Kategori</th>
+                  <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Isi Laporan</th>
+                  <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">Lokasi</th>
+                  <th className="py-3 px-3 font-label-sm text-label-sm text-on-surface-variant text-center">Status</th>
+                  <th className="py-3 px-3 font-label-sm text-label-sm text-on-surface-variant text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dataHalaman.map((t) => {
+                  const chip = chipWarna[t.status_aduan] || 'bg-surface-container-high text-on-surface-variant'
+                  const titik = titikWarna[t.status_aduan] || 'bg-surface-variant'
+                  return (
+                    <tr key={t.id} className="hover:bg-surface-container-low/70 transition-colors group border-b border-surface-variant/30 bg-surface-container-lowest/50">
+                      <td className="py-4 px-4 align-top">
+                        <div className="flex flex-col">
+                          <span className="font-mono font-bold text-primary group-hover:underline cursor-pointer">{t.nomor_tiket}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 align-top">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-on-surface">{t.nama_pelapor}</span>
+                          <span className="font-label-sm text-label-sm text-on-surface-variant font-mono">{t.identitas_pelapor}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-3 align-top">
+                        <span className="inline-flex px-2 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm font-medium">{t.kategori_layanan}</span>
+                      </td>
+                      <td className="py-4 px-4 align-top">
+                        <p className="line-clamp-2 text-on-surface font-medium leading-relaxed">{t.isi_laporan}</p>
+                      </td>
+                      <td className="py-4 px-3 align-top">
+                        <div className="flex items-start gap-1">
+                          <span className="material-symbols-outlined text-[16px] text-tertiary shrink-0 mt-0.5">location_on</span>
+                          <span className="text-on-surface-variant leading-snug">{t.lokasi_kejadian}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-3 align-top text-center">
+                        <select
+                          className="text-xs rounded-lg bg-surface-container-low px-2 py-1"
+                          value={t.status_aduan}
+                          onChange={(e) => handleStatusChange(t.id, e.target.value)}
                         >
-                          <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Tanggapan"
-                          className="p-1.5 rounded-lg text-secondary hover:bg-surface-container transition-colors"
-                          onClick={() => onPilihTiket(t.kode)}
-                        >
-                          <span className="material-symbols-outlined text-[18px]">reply</span>
-                        </button>
-                        <button
-                          type="button"
-                          title="Detail Tiket"
-                          className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"
-                          onClick={() => onPilihTiket(t.kode)}
-                        >
-                          <span className="material-symbols-outlined text-[18px]">visibility</span>
-                        </button>
-                      </div>
+                          {STATUS_PILIHAN.map((s) => (
+                            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                          ))}
+                        </select>
+                        <span className={`ml-1 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full ${chip} font-label-md text-label-md uppercase font-semibold`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${titik}`} />
+                          {STATUS_LABEL[t.status_aduan]}
+                        </span>
+                      </td>
+                      <td className="py-4 px-3 align-top text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            title="Hapus"
+                            className="p-1.5 rounded-lg text-tertiary hover:bg-surface-container transition-colors"
+                            onClick={() => handleHapus(t.id)}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {dataHalaman.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-on-surface-variant font-label-sm text-label-sm">
+                      Tidak ada pengaduan yang cocok dengan filter yang dipilih.
                     </td>
                   </tr>
-                )
-              })}
-              {dataHalaman.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-10 text-center text-on-surface-variant font-label-sm text-label-sm">
-                    Tidak ada pengaduan yang cocok dengan filter yang dipilih.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="p-space-md border-t border-surface-variant/40 flex items-center justify-between gap-space-sm">
-          <div className="flex items-center gap-space-sm">
-            <span className="font-label-sm text-label-sm text-on-surface-variant">Data per halaman</span>
-            <select className="h-9 px-2 rounded-lg bg-surface-container font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40">
-              {['10', '25', '50'].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+                )}
+              </tbody>
+            </table>
           </div>
+        )}
+
+        {!loading && !error && data.length === 0 && (
+          <div className="py-10 text-center text-on-surface-variant font-label-sm text-label-sm">
+            Belum ada data pengaduan.
+          </div>
+        )}
+
+        <div className="p-space-md border-t border-surface-variant/40 flex items-center justify-between gap-space-sm">
           <Pagination halaman={halamanSaatIni} totalHalaman={totalHalaman} onGanti={setHalaman} />
         </div>
       </div>
+
+      {/* Modal Tambah */}
+      {modalTambah && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-surface-container-lowest rounded-xl p-space-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-title-md text-title-md text-on-surface font-bold mb-space-md">Tambah Pengaduan</h3>
+            <form onSubmit={handleTambah} className="space-y-space-sm">
+              {[
+                ['nomor_tiket', 'Nomor Tiket'],
+                ['nama_pelapor', 'Nama Pelapor'],
+                ['identitas_pelapor', 'Identitas Pelapor'],
+                ['kategori_layanan', 'Kategori Layanan'],
+                ['judul_laporan', 'Judul Laporan'],
+                ['lokasi_kejadian', 'Lokasi Kejadian'],
+                ['lampiran_bukti', 'Lampiran Bukti (URL)'],
+                ['catatan_tindak_lanjut', 'Catatan Tindak Lanjut'],
+              ].map(([field, label]) => (
+                <div key={field}>
+                  <label className="block font-label-sm text-label-sm text-on-surface-variant mb-1">{label}</label>
+                  <input
+                    type="text"
+                    className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    value={form[field]}
+                    onChange={(e) => setForm({ ...form, [field]: e.target.value })}
+                    required={['nomor_tiket', 'nama_pelapor', 'identitas_pelapor', 'kategori_layanan', 'judul_laporan', 'isi_laporan', 'lokasi_kejadian'].includes(field)}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block font-label-sm text-label-sm text-on-surface-variant mb-1">Isi Laporan</label>
+                <textarea
+                  className="w-full px-3 py-2 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  rows={3}
+                  value={form.isi_laporan}
+                  onChange={(e) => setForm({ ...form, isi_laporan: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block font-label-sm text-label-sm text-on-surface-variant mb-1">Status</label>
+                <select
+                  className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-sm text-label-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  value={form.status_aduan}
+                  onChange={(e) => setForm({ ...form, status_aduan: e.target.value })}
+                >
+                  {STATUS_PILIHAN.map((s) => (
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  className="h-9 px-space-md rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm hover:bg-surface-container-high transition-colors"
+                  onClick={() => setModalTambah(false)}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="h-9 px-space-md rounded-lg bg-primary text-on-primary font-label-sm text-label-sm hover:bg-primary-container transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-
